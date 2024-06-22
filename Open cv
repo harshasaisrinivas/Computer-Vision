@@ -27,3 +27,64 @@ $ sudo apt-get install libgstreamer1.0-dev \
 $ sudo apt-get install gstreamer1.0-qt5
 # install if you want to work with audio
 $ sudo apt-get install gstreamer1.0-pulseaudio
+
+sudo apt install gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
+gst-launch-1.0 v4l2src ! videoconvert ! autovideosink
+cmake -D WITH_GSTREAMER=ON ..
+import cv2
+
+# Example GStreamer pipeline for a webcam
+gstreamer_pipeline = "v4l2src ! videoconvert ! appsink"
+
+# Open the video capture
+cap = cv2.VideoCapture(gstreamer_pipeline, cv2.CAP_GSTREAMER)
+
+if not cap.isOpened():
+    print("Error: Cannot open video stream")
+    exit()
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("Error: Cannot read frame")
+        break
+
+    # Perform image detection or any other processing
+    # ...
+
+    cv2.imshow('Frame', frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
+
+
+import cv2
+
+# GStreamer pipeline for video capture
+gstreamer_pipeline = "v4l2src ! videoconvert ! appsink"
+
+# Open the video capture
+cap = cv2.VideoCapture(gstreamer_pipeline, cv2.CAP_GSTREAMER)
+
+if not cap.isOpened():
+    print("Error: Cannot open video stream")
+    exit()
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("Error: Cannot read frame")
+        break
+
+    # Perform image detection or any other processing
+    # For example, convert to grayscale
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    cv2.imshow('Frame', gray)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
