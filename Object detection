@@ -1,0 +1,124 @@
+import cv2
+import numpy as np
+
+min_r, min_g, min_b = 0, 0, 0
+max_r, max_g, max_b = 121, 157, 55
+erosion_elem = 0
+erosion_size = 2
+dilation_elem = 0
+dilation_size = 18
+thresh = 100
+max_thresh = 255
+rng = np.random.default_rng(12345)
+
+def detect_text(rgb):
+    small = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+    morphKernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    grad = cv2.morphologyEx(small, cv2.MORPH_GRADIENT, morphKernel)
+    
+    _, bw = cv2.threshold(grad, 0.0, 255.0, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    
+    morphKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 1))
+    connected = cv2.morphologyEx(bw, cv2.MORPH_CLOSE, morphKernel)
+    
+    contours, hierarchy = cv2.findContours(connected, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+    
+    mask = np.zeros(bw.shape, dtype=np.uint8)
+    
+    for idx in range(len(contours)):
+        rect = cv2.boundingRect(contours[idx])
+        maskROI = mask[rect[1]:rect[1]+rect[3], rect[0]:rect[0]+rect[2]]
+        maskROI[:] = 0
+        cv2.drawContours(mask, contours, idx, (255,), -1)
+        
+        rrect = cv2.minAreaRect(contours[idx])
+        r = cv2.countNonZero(maskROI) / (rrect[1][0] * rrect[1][1])
+        
+        if r > 0.25 and 8 < rrect[1][0] < 50 and 8 < rrect[1][1] < 50:
+            color = (0, 255, 0)
+            thickness = 2
+        else:
+            continue
+        
+        pts = cv2.boxPoints(rrect)
+        pts = np.int0(pts)
+        for i in range(4):
+            cv2.line(rgb, tuple(pts[i]), tuple(pts[(i+1)%4]), color, thickness)
+    
+    cv2.imshow("txt", rgb)
+
+def colorThreshold():
+    global src_gray
+    src_ = cv2.inRange(src, (min_r, min_g, min_b), (max_r, max_g, max_b))
+    src_gray = src_
+    cv2.imshow("Color", src_)
+
+def Erosion():
+    erosion_type = [cv2.MORPH_RECT, cv2.MORPH_CROSS, cv2.MORPH_ELLIPSE][erosion_elem]
+    element = cv2.getStructuringElement(erosion_type, (2 * erosion_size + 1, 2 * erosion_size + 1), (erosion_size, erosion_size))
+    eroded = cv2.erode(src_, element)
+    cv2.imshow("Erosion Demo", eroded)
+
+def Dilation():
+    dilation_type = [cv2.MORPH_RECT, cv2.MORPH_CROSS, cv2.MORPH_ELLIPSE][dilation_elem]
+    element = cv2.getStructuringElement(dilation_type, (2 * dilation_size + 1, 2 * dilation_size + 1), (dilation_size, dilation_size))
+    dilated = cv2.dilate(src_, element)
+    cv2.imshow("Dilation Demo", dilated)
+
+def thresh_callback():
+    canny_output = cv2.Canny(src_gray, thresh, thresh * 2, 3)
+    contours, hierarchy = cv2.findContours(canny_output, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    
+    drawing = np.zeros((dst.shape[0], dst.shape[1], 3), dtype=np.uint8)
+    for i in range(len(contours)):
+        color = (rng.integers(0, 255), rng.integers(0, 255), rng.integers(0, 255))
+        cv2.drawContours(drawing, contours, i, color, 2, 8, hierarchy, 0)
+    
+    cv2.imshow("Contours", drawing)
+
+cap = cv2.VideoCapture(0)
+if not cap.isOpened():
+    print("Cannot open camera")
+    exit()
+
+while True:
+    ret, src = cap.read()
+    if not ret:
+        print("Can't receive frame (stream end?). Exiting ...")
+        break
+
+    dst = np.zeros_like(src)
+    
+    cv2.namedWindow("Color")
+    
+    cv2.createTrackbar("min R:", "Color", min_r, 255, lambda x: None)
+    cv2.createTrackbar("min G:", "Color", min_g, 255, lambda x: None)
+    cv2.createTrackbar("min B:", "Color", min_b, 255, lambda x: None)
+    cv2.createTrackbar("max R:", "Color", max_r, 255, lambda x: None)
+    cv2.createTrackbar("max G:", "Color", max_g, 255, lambda x: None)
+    cv2.createTrackbar("max B:", "Color", max_b, 255, lambda x: None)
+    
+    colorThreshold()
+    
+    cv2.namedWindow("Erosion Demo")
+    cv2.namedWindow("Dilation Demo")
+    
+    cv2.createTrackbar("Element:\n 0: Rect \n 1: Cross \n 2: Ellipse", "Erosion Demo", erosion_elem, 2, lambda x: None)
+    cv2.createTrackbar("Kernel size:\n 2n +1", "Erosion Demo", erosion_size, 21, lambda x: None)
+    cv2.createTrackbar("Element:\n 0: Rect \n 1: Cross \n 2: Ellipse", "Dilation Demo", dilation_elem, 2, lambda x: None)
+    cv2.createTrackbar("Kernel size:\n 2n +1", "Dilation Demo", dilation_size, 21, lambda x: None)
+    
+    Erosion()
+    Dilation()
+    
+    dstImage = np.zeros_like(src)
+    src.copyTo(dstImage, src_)
+    cv2.imshow("dstImage", src)
+    
+    detect_text(dstImage)
+    
+    if cv2.waitKey(30) >= 0:
+        break
+
+cap.release()
+cv2.destroyAllWindows()
