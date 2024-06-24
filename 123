@@ -1,0 +1,103 @@
+wget https://storage.googleapis.com/download.tensorflow.org/models/tflite/coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.zip
+unzip coco_ssd_mobilenet_v1_1.0_quant_2018_06_29.zip
+
+
+import cv2
+import numpy as np
+import tensorflow as tf
+from picamera2 import Picamera2
+import math
+
+# Load class names
+classFile = "labelmap.txt"
+with open(classFile, "rt") as f:
+    classNames = f.read().strip().split("\n")
+
+# Load the TFLite model and allocate tensors
+interpreter = tf.lite.Interpreter(model_path="detect.tflite")
+interpreter.allocate_tensors()
+
+# Get input and output tensors
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+
+def set_input_tensor(interpreter, image):
+    tensor_index = input_details[0]['index']
+    input_tensor = interpreter.tensor(tensor_index)()[0]
+    input_tensor[:, :] = image
+
+def get_output(interpreter):
+    boxes = interpreter.tensor(output_details[0]['index'])()
+    class_ids = interpreter.tensor(output_details[1]['index'])()
+    scores = interpreter.tensor(output_details[2]['index'])()
+    return boxes, class_ids, scores
+
+def getObjects(interpreter, img, thres, nms, draw=True, objects=[]):
+    height, width, _ = img.shape
+    input_data = cv2.resize(img, (300, 300))
+    input_data = np.expand_dims(input_data, axis=0)
+    input_data = (input_data - 127.5) / 127.5
+
+    set_input_tensor(interpreter, input_data)
+    interpreter.invoke()
+
+    boxes, class_ids, scores = get_output(interpreter)
+    objectInfo = []
+
+    if len(objects) == 0:
+        objects = classNames
+
+    for i in range(len(scores)):
+        if scores[i] > thres:
+            class_id = int(class_ids[i])
+            class_name = classNames[class_id - 1]
+            if class_name == 'bottle':  # Detect only bottles
+                box = boxes[i]
+                box = [int(box[1] * width), int(box[0] * height), int(box[3] * width), int(box[2] * height)]
+                objectInfo.append([box, class_name])
+                if draw:
+                    cv2.rectangle(img, box, color=(0, 255, 0), thickness=2)
+                    cv2.putText(img, class_name.upper(), (box[0] + 10, box[1] + 30), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
+                    cv2.putText(img, str(round(scores[i] * 100, 2)), (box[0] + 200, box[1] + 30), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 255, 0), 2)
+
+    return img, objectInfo
+
+def calculate_angle(frame, box):
+    # Get center of the box
+    centerX = (box[0] + box[2]) // 2
+    centerY = (box[1] + box[3]) // 2
+    
+    # Get image dimensions
+    height, width = frame.shape[:2]
+    
+    # Calculate angle relative to the center of the image
+    angle_x = math.degrees(math.atan((2 * centerX - width) / width))
+    angle_y = math.degrees(math.atan((2 * centerY - height) / height))
+    
+    return angle_x, angle_y
+
+if __name__ == "__main__":
+    picam2 = Picamera2()
+    picam2.start()
+
+    while True:
+        frame = picam2.capture_array()
+        # Convert frame to RGB format if it is in RGBA format
+        if frame.shape[2] == 4:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+        
+        result, objectInfo = getObjects(interpreter, frame, 0.45, 0.2)
+        
+        for box, className in objectInfo:
+            # Calculate angle for each detected bottle
+            angle_x, angle_y = calculate_angle(frame, box)
+            angle_str = f"Angle_x: {angle_x:.2f}, Angle_y: {angle_y:.2f}"
+            cv2.putText(result, angle_str, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+        cv2.imshow("Output", result)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    picam2.stop()
+    cv2.destroyAllWindows()
