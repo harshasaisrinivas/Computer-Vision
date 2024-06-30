@@ -39,3 +39,6 @@ sudo apt-get install -y libjpeg8-dev libtiff5-dev libjasper-dev libpng12-dev
 sudo apt-get install -y libavcodec-dev libavformat-dev libswscale-dev libv4l-dev
 sudo apt-get install -y libxvidcore-dev libx264-dev
 sudo apt-get install -y libatlas-base-dev gfortran
+
+
+https://www.kaggle.com/code/vencerlanz09/bottle-image-classification-using-yolov5/output
